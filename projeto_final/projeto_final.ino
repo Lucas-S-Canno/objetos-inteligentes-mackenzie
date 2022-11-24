@@ -37,7 +37,7 @@ const char ALIAS1[] = "Temp";
 const char ALIAS2[] = "Umi";
 const char ALIAS3[] = "Temp_corp";
 const char ALIAS4[] = "bpm";
-
+char TOPICO[50] = "device/"
 unsigned long espera;
 unsigned long reconecta;
 const long INTERVALO = 1200000; //20 minutos
