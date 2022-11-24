@@ -6,7 +6,12 @@
 #include <dht.h>
 //sensor de BPM
 #define USE_ARDUINO_INTERRUPTS true
-#include <PulseSensorPlayground.h>  
+#include <PulseSensorPlayground.h>
+//MQTT
+#include <WiFi.h>
+#include <PubSubClient.h>
+#include <DHT.h>
+#include <ArduinoJson.h>
 
 //sensor temp corporal
 #define ONE_WIRE_BUS 2
@@ -24,8 +29,21 @@ int Threshold = 550;
 PulseSensorPlayground pulseSensor;
 
 //esp8266 serial
-SoftwareSerial esp8266(3, 4);
 #define DEBUG true
+SoftwareSerial esp8266(3, 4);
+
+// JSON
+const char ALIAS1[] = "Temp";
+const char ALIAS2[] = "Umi";
+const char ALIAS3[] = "Temp_corp";
+const char ALIAS4[] = "bpm";
+
+unsigned long espera;
+unsigned long reconecta;
+const long INTERVALO = 1200000; //20 minutos
+const char* ID_DISPOSITIVO = "Canno";
+const char* TOKEN_API = "77661629-ab2c-442e-a66d-e526f52a09f2";
+const char* SENHA_ID = "04031996";
 
 void setup() {
   Serial.begin(9600);
@@ -76,43 +94,40 @@ void loop() {
   }
   Serial.print("------------------------------------------------------\n");
 
-  //criação da pagina com dados
-  if (esp8266.available()) {
-    if (esp8266.find("+IPD,")) {
-      delay(300);
-      int connectionId = esp8266.read() - 48;
-      String webpage = "<head><meta http-equiv=""refresh"" content=""3"">";
-      webpage += "</head>";
-      webpage += "<h1>Web Server</h1>";
-      webpage += "<h2>Umidade: ";
-      webpage += DHT.humidity;
-      webpage += "%";
-      webpage += "</h2>";
-      webpage += "<h2>Temperatura do ambiente: ";
-      webpage += DHT.temperature;
-      webpage += "C";
-      webpage += "</h2>";
-      webpage += "<h2>Temperatura corporal: ";
-      webpage += tempC;
-      webpage += "C | ";
-      webpage += tempF;
-      webpage += "F";
-      webpage += "</h2>";
-      webpage += "<h2>BPM: ";
-      webpage += myBPM;
-      webpage += "</h2>";
-      String cipSend = "AT+CIPSEND=";
-      cipSend += connectionId;
-      cipSend += ",";
-      cipSend += webpage.length();
-      cipSend += "\r\n";
-      sendData(cipSend, 1000, DEBUG);
-      sendData(webpage, 1000, DEBUG);
-      String closeCommand = "AT+CIPCLOSE=";
-      closeCommand += connectionId; // append connection id
-      closeCommand += "\r\n";
-      sendData(closeCommand, 3000, DEBUG);
+  // MQTT
+   MQTT.loop();
+   if(!MQTT.connected()){
+    if(reconecta < millis()){
+      Serial.println("");
+      Serial.println("Conectando ao servidor...");
+      if(!MQTT.connect(ID_DISPOSITIVO, TOKEN_API, SENHA_ID)){ 
+        Serial.println("Falha na conexao com o servidor.");
+      } else {
+        Serial.println("Conectado!");
+        Serial.print("Enviando publicacoes para ");
+        Serial.println(TOPICO);  
+      }
+      reconecta = millis() + 5000;
+      
     }
+  }else{
+    DynamicJsonDocument json(JSON_OBJECT_SIZE(2));
+          
+    json[ALIAS1] = "Temp";
+    json[ALIAS2] = "Umi";
+    json[ALIAS3] = "Temp_corp";
+    json[ALIAS4] = "bpm";
+
+    size_t tamanho_mensagem = measureJson(json) + 1;
+
+    char mensagem[tamanho_mensagem];
+
+    serializeJson(json, mensagem, tamanho_mensagem);
+    
+    Serial.println("");
+    Serial.print("Mensagem enviada: ");
+    Serial.println(mensagem);
+    MQTT.publish(TOPICO, mensagem);
   }
 
   delay(2000); 
